@@ -7,6 +7,7 @@ log.setLevel(log.LEVELS.DEBUG);
 
 log.debug('Setting up crawler.');
 const crawler = new PlaywrightCrawler({
+  headless: false,
   // Instead of the long requestHandler with
   // if clauses we provide a router instance.
   requestHandler: router,
