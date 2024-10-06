@@ -1,0 +1,38 @@
+version: "3.9"
+
+volumes:
+  local-postgres-data:
+
+services:
+  crawlee_test_downloader:
+    image: havardox/crawlee_test_downloader:latest
+    container_name: crawlee_test_downloader
+    restart: "no"
+    build:
+      context: .
+      dockerfile: ./compose/crawlee_test_downloader/Dockerfile
+      target: base
+      tags:
+        - havardox/crawlee_test_downloader:0.2.0
+    
+    volumes:
+      - .:/home/node/app/src
+      - /home/node/app
+    env_file:
+      - .envs/crawlee_test_downloader/dev.env
+
+    depends_on:
+      - crawlee_test_db
+
+  crawlee_test_db:
+    image: postgres:16.0-alpine
+    container_name: crawlee_test_db
+    restart: "no"
+    command: ["postgres", "-c", "log_statement=all"]
+    ports:
+    - "5432:5432"
+    volumes:
+      # - ./compose/postgres/db-init.sql:/docker-entrypoint-initdb.d/db-init.sql
+      - local-postgres-data:/var/lib/postgresql/data
+    env_file:
+      - .envs/crawlee_test_db/dev.env
