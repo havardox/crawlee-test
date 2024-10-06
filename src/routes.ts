@@ -1,87 +1,83 @@
-import { createPlaywrightRouter, Dataset } from 'crawlee';
+import { createPlaywrightRouter } from 'crawlee';
+import type { Page } from 'playwright';
 
-// createPlaywrightRouter() is only a helper to get better
-// intellisense and typings. You can use Router.create() too.
 const router = createPlaywrightRouter();
 
-// This replaces the request.label === DETAIL branch of the if clause.
-router.addHandler('DETAIL', async ({ request, page, log }) => {
-  log.debug(`Extracting data: ${request.url}`);
-  const urlPart = request.url.split('/').slice(-1); // ['sennheiser-mke-440-professional-stereo-shotgun-microphone-mke-440']
-  const manufacturer = urlPart[0].split('-')[0]; // 'sennheiser'
+async function* scrollToBottom(page: Page) {
+  await page.locator('[data-test-id*="venueCard"]').first().waitFor({ timeout: 10000 });
+  let previousElementsCount = 0;
+  let continueScroll = true;
 
-  const title = await page.locator('.product-meta h1').textContent();
-  const sku = await page.locator('span.product-meta__sku-number').textContent();
+  while (continueScroll) {
+    /* eslint-disable no-await-in-loop, @typescript-eslint/no-loop-func */
 
-  const priceElement = page
-    .locator('span.price')
-    .filter({
-      hasText: '$',
-    })
-    .first();
-
-  const currentPriceString = await priceElement.textContent();
-  let price = null;
-  if (currentPriceString) {
-    const rawPrice = currentPriceString.split('$')[1];
-    price = Number(rawPrice.replaceAll(',', ''));
-  }
-
-  const inStockElement = page
-    .locator('span.product-form__inventory')
-    .filter({
-      hasText: 'In stock',
-    })
-    .first();
-
-  const inStock = (await inStockElement.count()) > 0;
-
-  const results = {
-    url: request.url,
-    manufacturer,
-    title,
-    sku,
-    currentPrice: price,
-    availableInStock: inStock,
-  };
-
-  log.debug(`Saving data: ${request.url}`);
-  await Dataset.pushData(results);
-});
-
-router.addHandler('CATEGORY', async ({ page, enqueueLinks, request, log }) => {
-  log.debug(`Enqueueing pagination for: ${request.url}`);
-  // We are now on a category page. We can use this to paginate through and enqueue all products,
-  // as well as any subsequent pages we find
-
-  await page.waitForSelector('.product-item > a');
-  await enqueueLinks({
-    selector: '.product-item > a',
-    label: 'DETAIL', // <= note the different label
-  });
-
-  // Now we need to find the "Next" button and enqueue the next page of results (if it exists)
-  const nextButton = await page.$('a.pagination__next');
-  if (nextButton) {
-    await enqueueLinks({
-      selector: 'a.pagination__next',
-      label: 'CATEGORY', // <= note the same label
+    // Collect all venueCard elements
+    const venueCards = await page.evaluate(() => {
+      return Array.from(document.querySelectorAll('[data-test-id*="venueCard"]')).map((element) => {
+        return {
+          href: element.getAttribute('href'), // Adjust according to how your links are structured
+          element, // Store the element reference for later
+        };
+      });
     });
+
+    const currentElementsCount = venueCards.length;
+
+    // Scroll to the bottom of the page
+    await page.evaluate(() => {
+      window.scrollTo({
+        top: document.documentElement.scrollHeight,
+        behavior: 'smooth',
+      });
+    });
+
+    // Wait for new elements to load
+    try {
+      await page
+        .locator(`[data-test-id*="venueCard"] >> nth=${currentElementsCount}`)
+        .waitFor({ timeout: 6000, state: 'attached' });
+    } catch (error) {
+      console.debug(
+        `Exception caught: No new elements found after ${currentElementsCount} elements. Stopping scroll.`,
+        error,
+      );
+      continueScroll = false;
+    }
+
+    // Collect new links based on the previously counted elements
+    const newLinks = venueCards
+      .slice(previousElementsCount)
+      .map((card: { href: any }) => card.href);
+    yield newLinks; // Yield the batch of new links
+    // Update previousElementsCount for the next iteration
+    previousElementsCount = currentElementsCount;
+
+    await page.screenshot({ path: `scroll_${currentElementsCount}.png` });
   }
-});
+}
 
-// This is a fallback route which will handle the start URL
-// as well as the LIST labeled URLs.
-router.addDefaultHandler(async ({ request, page, enqueueLinks, log }) => {
-  log.debug(`Enqueueing categories from page: ${request.url}`);
-  // This means we're on the start page, with no label.
-  // On this page, we just want to enqueue all the category pages.
+// Default route to handle the start URL and other labeled URLs
+router.addDefaultHandler(async ({ request, page, log }) => {
+  log.debug(`Enqueueing from page: ${request.url}`);
+  const cookiesBtn = page.locator("[data-test-id='allow-button']");
+  try {
+    await cookiesBtn.waitFor({ timeout: 6000 });
+    await cookiesBtn.click();
+  } catch (error) {
+    console.debug('Exception caught: No cookie button found.', error);
+  }
 
-  await page.waitForSelector('.collection-block-item');
-  await enqueueLinks({
-    selector: '.collection-block-item',
-    label: 'CATEGORY',
-  });
+  let linkCount = 0;
+  /* eslint-disable no-restricted-syntax */
+  for await (const links of scrollToBottom(page)) {
+    for (const link of links) {
+      log.debug(`New link found: ${link}`);
+      linkCount += 1;
+      // Enqueue each new link for further processing
+    }
+  }
+
+  log.debug(`Found ${linkCount} number of links to restaurants.`);
 });
 
 export default router;

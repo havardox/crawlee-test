@@ -8,6 +8,7 @@ services:
     image: havardox/crawlee_test_downloader:latest
     container_name: crawlee_test_downloader
     restart: "no"
+    network_mode: host
     build:
       context: .
       dockerfile: ./compose/crawlee_test_downloader/Dockerfile

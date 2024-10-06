@@ -7,10 +7,10 @@ log.setLevel(log.LEVELS.DEBUG);
 
 log.debug('Setting up crawler.');
 const crawler = new PlaywrightCrawler({
-  headless: false,
   // Instead of the long requestHandler with
   // if clauses we provide a router instance.
   requestHandler: router,
+  requestHandlerTimeoutSecs: 600,
 });
 
-await crawler.run(['https://warehouse-theme-metal.myshopify.com/collections']);
+await crawler.run(['https://wolt.com/et/est/tallinn/restaurants']);
