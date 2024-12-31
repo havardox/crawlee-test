@@ -1,7 +1,7 @@
 FROM node:21-bookworm-slim AS base
 
-ARG HOST_USER_UID=1001
-ARG HOST_USER_GID=1001
+ARG HOST_USER_UID=1000
+ARG HOST_USER_GID=1000
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/usr/bin
 ENV CRAWLEE_STORAGE_DIR=/home/node/app/src/dist/data
@@ -20,6 +20,7 @@ USER node
 WORKDIR /home/node/app
 
 COPY --chown=node:node package.json .
+COPY --chown=node:node compose/crawlee_test_downloader/start.sh .
 
 RUN set -ex; \
   npm install; \
@@ -29,4 +30,4 @@ WORKDIR /home/node/app/src
  
 ENTRYPOINT ["compose/crawlee_test_downloader/entrypoint.sh"]
 
-CMD [ "npm", "run", "start" ]
+CMD ["/home/node/app/start.sh"]
